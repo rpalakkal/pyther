@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Connection } from "@solana/web3.js";
+import { useRouter } from "next/router";
 import {
   PriceStatus,
   PythHttpClient,
   getPythClusterApiUrl,
   getPythProgramKeyForCluster,
   PythCluster,
+  PythConnection,
 } from "@pythnetwork/client";
 import { formatCurrency } from "@coingecko/cryptoformat";
 
@@ -17,49 +19,32 @@ interface IProduct {
   id: string;
   name: string;
   code: string;
-  price: string;
-  confidence: string;
   hour: string;
   day: string;
   week: string;
+  redir: string;
   // marketCap: string;
   // volume: string;
   // circulatingSupply: string;
 }
 
-// import { Connection } from '@solana/web3.js'
-// import { getPythClusterApiUrl, getPythProgramKeyForCluster, PythCluster, PriceStatus, PythConnection } from '@pythnetwork/client'
-
-// const PYTHNET_CLUSTER_NAME: PythCluster = 'pythnet'
-// const connection = new Connection(getPythClusterApiUrl(PYTHNET_CLUSTER_NAME))
-// const pythPublicKey = getPythProgramKeyForCluster(PYTHNET_CLUSTER_NAME)
-
-// const pythConnection = new PythConnection(connection, pythPublicKey)
-// pythConnection.onPriceChangeVerbose((productAccount, priceAccount) => {
-//   // The arguments to the callback include solana account information / the update slot if you need it.
-//   const product = productAccount.accountInfo.data.product
-//   const price = priceAccount.accountInfo.data
-//   // sample output:
-//   // SOL/USD: $14.627930000000001 ±$0.01551797
-//   if (price.price && price.confidence) {
-//     // tslint:disable-next-line:no-console
-//     console.log(`${product.symbol}: $${price.price} \xB1$${price.confidence}`)
-//   } else {
-//     // tslint:disable-next-line:no-console
-//     console.log(`${product.symbol}: price currently unavailable. status is ${PriceStatus[price.status]}`)
-//   }
-// })
-
-// tslint:disable-next-line:no-console
-// console.log('Reading from Pyth price feed...')
-// pythConnection.start()
+interface IPrice {
+  price: number;
+  confidence: number;
+  priceString: string;
+  confidenceString: string;
+}
 
 const CoinTable = () => {
   const [products, setProducts] = useState<IProduct[]>([]);
+  const [prices, setPrices] = useState<{ [symbol: string]: IPrice }>({});
+  const router = useRouter();
+
   useEffect(() => {
+    const pythClient = new PythHttpClient(connection, pythPublicKey);
     const fetchProducts = async () => {
-      const pythClient = new PythHttpClient(connection, pythPublicKey);
       const data = await pythClient.getData();
+      let tempPrices: { [symbol: string]: IPrice } = {};
       const tempProducts = data.symbols
         .filter(
           (symbol) =>
@@ -71,14 +56,22 @@ const CoinTable = () => {
           const formattedPrice = price.price
             ? formatCurrency(price.price, "USD", "en")
             : "";
-          const priceString = price.price ? `$${price.price}` : "";
+          const priceString = price.price ? formattedPrice : "";
           const confidenceString = price.confidence
-            ? `±$${formatCurrency(price.confidence, "USD", "en")}`
+            ? `±${formatCurrency(price.confidence, "USD", "en")}`
             : "";
           const product = data.productFromSymbol.get(symbol)!;
+          const priceInfo = {
+            price: price.price ? price.price : 0,
+            confidence: price.confidence ? price.confidence : 0,
+            priceString,
+            confidenceString,
+          };
+          tempPrices = { ...tempPrices, [symbol]: priceInfo };
           return {
             id: symbol,
             name: `${product.base}/${product.quote_currency}`,
+            redir: `${product.base}${product.quote_currency}`,
             code: product.base,
             price: priceString,
             confidence: confidenceString,
@@ -90,14 +83,62 @@ const CoinTable = () => {
             // circulatingSupply: "$4,397.00",
           };
         });
+      setPrices(tempPrices);
       setProducts(tempProducts);
     };
     fetchProducts();
+    const interval = setInterval(async () => {
+      const data = await pythClient.getData();
+      let tempPrices: { [symbol: string]: IPrice } = {};
+      for (const product of products) {
+        const price = data.productPrice.get(product.id)!;
+        const formattedPrice = price.price
+          ? formatCurrency(price.price, "USD", "en")
+          : "";
+        const priceString = price.price ? formattedPrice : "";
+        const confidenceString = price.confidence
+          ? `±${formatCurrency(price.confidence, "USD", "en")}`
+          : "";
+        const priceInfo = {
+          price: price.price ? price.price : 0,
+          confidence: price.confidence ? price.confidence : 0,
+          priceString,
+          confidenceString,
+        };
+        tempPrices = { ...tempPrices, [product.id]: priceInfo };
+      }
+      setPrices(tempPrices);
+    }, 5000);
+    // const pythConnection = new PythConnection(connection, pythPublicKey);
+    // pythConnection.onPriceChangeVerbose((productAccount, priceAccount) => {
+    //   const product = productAccount.accountInfo.data.product;
+    //   const price = priceAccount.accountInfo.data;
+    //   if (price.price && price.confidence && product.asset_type === "Crypto") {
+    //     const priceString = formatCurrency(price.price, "USD", "en");
+    //     const confidenceString = `±${formatCurrency(
+    //       price.confidence,
+    //       "USD",
+    //       "en"
+    //     )}`;
+    //     const priceInfo = {
+    //       price: price.price ? price.price : 0,
+    //       confidence: price.confidence ? price.confidence : 0,
+    //       priceString,
+    //       confidenceString,
+    //     };
+    //     const tempPrices = { ...prices, [product.symbol]: priceInfo };
+    //     setPrices(tempPrices);
+    //   } else {
+    //     // tslint:disable-next-line:no-console
+    //     // console.log(`${product.symbol}: price currently unavailable. status is ${PriceStatus[price.status]}`)
+    //   }
+    // });
+    // pythConnection.start();
   }, []);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
-      <div className="mt-8 flow-root">
+      <div className="mt-4 flow-root">
         <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
             <table className="min-w-full divide-y divide-gray-300">
@@ -173,7 +214,11 @@ const CoinTable = () => {
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {products.map((product) => (
-                  <tr key={product.id}>
+                  <tr
+                    className="hover:bg-slate-50 cursor-pointer"
+                    key={product.id}
+                    onClick={() => router.push(product.redir)}
+                  >
                     {/* <td className="whitespace-nowrap py-2 pl-4 pr-3 text-sm text-gray-500 sm:pl-0">
                       {product.id}
                     </td> */}
@@ -181,10 +226,10 @@ const CoinTable = () => {
                       {product.name}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-900">
-                      {product.price}
+                      {prices[product.id].priceString}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-900">
-                      {product.confidence}
+                      {prices[product.id].confidenceString}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-500">
                       {product.hour}
