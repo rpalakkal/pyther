@@ -9,7 +9,7 @@ async function main() {
 
   const options = { value: ethers.utils.parseEther("0.5") };
   const receipt = await contract.registerSubscription(
-    "0x651071f8c7ab2321b6bdd3bc79b94a50841a92a6e065f9e3b8b9926a8fb5a5d1",
+    "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",
     ethers.utils.parseEther("0.001"),
     false,
     true,
