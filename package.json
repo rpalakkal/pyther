@@ -26,6 +26,7 @@
     "typescript": ">=4.5.0"
   },
   "dependencies": {
-    "@pythnetwork/pyth-sdk-solidity": "^2.2.1"
+    "@pythnetwork/pyth-sdk-solidity": "^2.2.1",
+    "dotenv": "^16.0.3"
   }
 }

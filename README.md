@@ -1,13 +1,9 @@
-# Sample Hardhat Project
+# Pyther Contracts
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
-
-Try running some of the following tasks:
+Run the following command to deploy the contract to Goerli.
 
 ```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
+npx hardhat run scripts/deploy.ts --network goerli 
 ```
+
+The contract is currently live at `0xaB17834feb6F2597923bA6081668941f740E0BF2` on Goerli.
