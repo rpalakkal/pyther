@@ -8,6 +8,15 @@ export default function Home() {
 
   return (
     <Base>
+    <>
+      <div className="p-4">
+        <h1 className="text-2xl font-bold text-gray-900">
+          {product}
+        </h1>
+        <button onClick={()=>router.push(`../subscribe/${product}`)}>
+          Subscribe to Price Feed
+        </button>
+      </div>
       <Chart
         symbol={`PYTH:${product}`}
         interval="1"
@@ -16,6 +25,7 @@ export default function Home() {
         allow_symbol_change={false}
         withdateranges={false}
       />
+      </>
     </Base>
   );
 }

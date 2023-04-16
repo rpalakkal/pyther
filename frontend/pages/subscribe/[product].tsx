@@ -14,6 +14,7 @@ const symbolToId: { [symbol: string]: string } = {
 const submitSubscription = async (
   priceId: string,
   price: number,
+  amount: number,
   isPrice: boolean,
   isTime: boolean,
   priceDifference: number,
@@ -23,17 +24,21 @@ const submitSubscription = async (
   try {
     const { ethereum } = window as any;
     const provider = new ethers.BrowserProvider(ethereum);
+    await provider.send("eth_requestAccounts", []);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(contractAddress, abi, signer);
 
+    const options = { value: ethers.parseEther(amount.toString()) };
     let tx = await contract.registerSubscription(
       priceId,
-      price,
+      ethers.parseEther(price.toString()),
       isPrice,
       isTime,
       priceDifference,
-      timeDifference
+      timeDifference * 1000,
+      options
     );
+    console.log(tx)
   } catch (err) {
     console.log(err);
   }
@@ -181,6 +186,7 @@ export default function Home() {
             await submitSubscription(
               symbolToId[product as string],
               price,
+              transferAmount,
               enablePrice,
               enableTime,
               priceDifference,
