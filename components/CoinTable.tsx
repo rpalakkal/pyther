@@ -19,13 +19,7 @@ interface IProduct {
   id: string;
   name: string;
   code: string;
-  hour: string;
-  day: string;
-  week: string;
   redir: string;
-  // marketCap: string;
-  // volume: string;
-  // circulatingSupply: string;
 }
 
 interface IPrice {
@@ -33,15 +27,31 @@ interface IPrice {
   confidence: number;
   priceString: string;
   confidenceString: string;
+  hourChange: number;
+  weekChange: number;
+  dayChange: number;
+  priceHourAgo: number;
+}
+
+async function getHistoricalPrice(
+  timestamp: number,
+  base: string,
+  quote: string
+): Promise<any> {
+  const response = await fetch(
+    `https://pyth-api.vintage-orange-muffin.com/tradingview/history?from=${timestamp}&to=${timestamp}&resolution=1&symbol=${base}/${quote}`
+  );
+  const body = await response.json();
+  return body["c"][0];
 }
 
 const CoinTable = () => {
   const [products, setProducts] = useState<IProduct[]>([]);
   const [prices, setPrices] = useState<{ [symbol: string]: IPrice }>({});
   const router = useRouter();
+  const pythClient = new PythHttpClient(connection, pythPublicKey);
 
   useEffect(() => {
-    const pythClient = new PythHttpClient(connection, pythPublicKey);
     const fetchProducts = async () => {
       const data = await pythClient.getData();
       let tempPrices: { [symbol: string]: IPrice } = {};
@@ -49,7 +59,10 @@ const CoinTable = () => {
         .filter(
           (symbol) =>
             data.productFromSymbol.get(symbol)!.asset_type === "Crypto" &&
-            data.productPrice.get(symbol)!.price
+            data.productPrice.get(symbol)!.price &&
+            ["Crypto.BTC/USD", "Crypto.ETH/USD", "Crypto.SOL/USD"].includes(
+              symbol
+            )
         )
         .map((symbol) => {
           const price = data.productPrice.get(symbol)!;
@@ -66,7 +79,12 @@ const CoinTable = () => {
             confidence: price.confidence ? price.confidence : 0,
             priceString,
             confidenceString,
+            hourChange: 0,
+            dayChange: 0,
+            weekChange: 0,
+            priceHourAgo: 0,
           };
+
           tempPrices = { ...tempPrices, [symbol]: priceInfo };
           return {
             id: symbol,
@@ -75,40 +93,13 @@ const CoinTable = () => {
             code: product.base,
             price: priceString,
             confidence: confidenceString,
-            hour: "12.00",
-            day: "$4,397.00",
-            week: "$4,397.00",
-            // marketCap: "$4,397.00",
-            // volume: "$4,397.00",
-            // circulatingSupply: "$4,397.00",
           };
-        });
+        })
+        .sort((a, b) => a.id.localeCompare(b.id));
       setPrices(tempPrices);
       setProducts(tempProducts);
     };
     fetchProducts();
-    const interval = setInterval(async () => {
-      const data = await pythClient.getData();
-      let tempPrices: { [symbol: string]: IPrice } = {};
-      for (const product of products) {
-        const price = data.productPrice.get(product.id)!;
-        const formattedPrice = price.price
-          ? formatCurrency(price.price, "USD", "en")
-          : "";
-        const priceString = price.price ? formattedPrice : "";
-        const confidenceString = price.confidence
-          ? `±${formatCurrency(price.confidence, "USD", "en")}`
-          : "";
-        const priceInfo = {
-          price: price.price ? price.price : 0,
-          confidence: price.confidence ? price.confidence : 0,
-          priceString,
-          confidenceString,
-        };
-        tempPrices = { ...tempPrices, [product.id]: priceInfo };
-      }
-      setPrices(tempPrices);
-    }, 5000);
     // const pythConnection = new PythConnection(connection, pythPublicKey);
     // pythConnection.onPriceChangeVerbose((productAccount, priceAccount) => {
     //   const product = productAccount.accountInfo.data.product;
@@ -135,6 +126,90 @@ const CoinTable = () => {
     // });
     // pythConnection.start();
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const data = await pythClient.getData();
+      let tempPrices = { ...prices };
+      for (const product of products) {
+        const price = data.productPrice.get(product.id)!;
+        const formattedPrice = price.price
+          ? formatCurrency(price.price, "USD", "en")
+          : "";
+        const priceString = price.price ? formattedPrice : "";
+        const confidenceString = price.confidence
+          ? `±${formatCurrency(price.confidence, "USD", "en")}`
+          : "";
+        if (
+          price.price &&
+          price.confidence &&
+          data.productFromSymbol.get(product.id)!.asset_type === "Crypto"
+        ) {
+          const changeInPrice =
+            (price.price - tempPrices[product.id].priceHourAgo) / price.price;
+
+          let priceHourAgoString = tempPrices[product.id].hourChange;
+          let priceDayAgoString = tempPrices[product.id].dayChange;
+          let priceWeekAgoString = tempPrices[product.id].weekChange;
+          let priceHourAgo = tempPrices[product.id].priceHourAgo;
+
+          console.log(
+            Math.abs(
+              Math.abs(changeInPrice) - tempPrices[product.id].hourChange
+            )
+          );
+          if (
+            Math.abs(
+              Math.abs(changeInPrice) - tempPrices[product.id].hourChange
+            ) > 0.1
+          ) {
+            const today = new Date();
+            const yesterday = Math.floor(
+              (today.getTime() - 1000 * 60 * 60 * 24) / 1000
+            );
+            const hourago = Math.floor(
+              (today.getTime() - 1000 * 60 * 60) / 1000
+            );
+            const weekago = Math.floor(
+              (today.getTime() - 1000 * 60 * 60 * 24 * 7) / 1000
+            );
+            const base = data.productFromSymbol.get(product.id)!.base;
+            const quote = data.productFromSymbol.get(
+              product.id
+            )!.quote_currency;
+            priceHourAgo = await getHistoricalPrice(hourago, base, quote);
+            const priceDayAgo = await getHistoricalPrice(
+              yesterday,
+              base,
+              quote
+            );
+            const priceWeekAgo = await getHistoricalPrice(weekago, base, quote);
+            priceHourAgoString =
+              (100 * (price.price - priceHourAgo)) / price.price;
+            priceDayAgoString =
+              (100 * (price.price - priceDayAgo)) / price.price;
+            priceWeekAgoString =
+              (100 * (price.price - priceWeekAgo)) / price.price;
+          }
+          const priceInfo = {
+            price: price.price ? price.price : 0,
+            confidence: price.confidence ? price.confidence : 0,
+            priceString,
+            confidenceString,
+            hourChange: priceHourAgoString,
+            dayChange: priceDayAgoString,
+            weekChange: priceWeekAgoString,
+            priceHourAgo,
+          };
+          tempPrices[product.id] = priceInfo;
+        }
+      }
+      setPrices(tempPrices);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [products]);
+
+  useEffect(() => {}, [products]);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -186,30 +261,6 @@ const CoinTable = () => {
                   >
                     7d %
                   </th>
-                  {/* <th
-                    scope="col"
-                    className="whitespace-nowrap px-2 py-3.5 text-left text-sm font-semibold text-gray-900"
-                  >
-                    Market Cap
-                  </th>
-                  <th
-                    scope="col"
-                    className="whitespace-nowrap px-2 py-3.5 text-left text-sm font-semibold text-gray-900"
-                  >
-                    Volume
-                  </th>
-                  <th
-                    scope="col"
-                    className="whitespace-nowrap px-2 py-3.5 text-left text-sm font-semibold text-gray-900"
-                  >
-                    Circulating Supply
-                  </th> */}
-                  {/* <th
-                    scope="col"
-                    className="relative whitespace-nowrap py-3.5 pl-3 pr-4 sm:pr-0"
-                  >
-                    <span className="sr-only">Edit</span>
-                  </th> */}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
@@ -219,9 +270,6 @@ const CoinTable = () => {
                     key={product.id}
                     onClick={() => router.push(product.redir)}
                   >
-                    {/* <td className="whitespace-nowrap py-2 pl-4 pr-3 text-sm text-gray-500 sm:pl-0">
-                      {product.id}
-                    </td> */}
                     <td className="whitespace-nowrap px-2 py-2 text-left text-sm font-medium text-gray-900">
                       {product.name}
                     </td>
@@ -231,24 +279,33 @@ const CoinTable = () => {
                     <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-900">
                       {prices[product.id].confidenceString}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-500">
-                      {product.hour}
+                    <td
+                      className={`whitespace-nowrap px-2 py-2 text-left text-sm ${
+                        prices[product.id].hourChange > 0
+                          ? "text-green-600"
+                          : "text-red-500"
+                      }`}
+                    >
+                      {`${prices[product.id].hourChange.toFixed(3)} %`}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-500">
-                      {product.day}
+                    <td
+                      className={`whitespace-nowrap px-2 py-2 text-left text-sm ${
+                        prices[product.id].dayChange > 0
+                          ? "text-green-600"
+                          : "text-red-500"
+                      }`}
+                    >
+                      {`${prices[product.id].dayChange.toFixed(3)} %`}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-left text-sm text-gray-500">
-                      {product.week}
+                    <td
+                      className={`whitespace-nowrap px-2 py-2 text-left text-sm ${
+                        prices[product.id].weekChange > 0
+                          ? "text-green-600"
+                          : "text-red-500"
+                      }`}
+                    >
+                      {`${prices[product.id].weekChange.toFixed(3)} %`}
                     </td>
-                    {/* <td className="whitespace-nowrap px-2 py-2 text-sm text-gray-500">
-                      {product.marketCap}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-sm text-gray-500">
-                      {product.volume}
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-sm text-gray-500">
-                      {product.circulatingSupply}
-                    </td> */}
                   </tr>
                 ))}
               </tbody>
