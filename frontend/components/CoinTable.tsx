@@ -89,7 +89,7 @@ const CoinTable = () => {
           return {
             id: symbol,
             name: `${product.base}/${product.quote_currency}`,
-            redir: `${product.base}${product.quote_currency}`,
+            redir: `chart/${product.base}${product.quote_currency}`,
             code: product.base,
             price: priceString,
             confidence: confidenceString,

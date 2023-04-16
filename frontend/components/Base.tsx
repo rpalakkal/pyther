@@ -13,7 +13,7 @@ export default function Home({ children }: { children: JSX.Element }) {
         </div>
       </header>
       <main className="flex min-h-screen flex-col items-center justify-between p-6">
-        <div className="flex flex-col w-full flex-1 px-20 text-center">
+        <div className="flex flex-col w-full flex-1 px-20">
           {children}
         </div>
       </main>
